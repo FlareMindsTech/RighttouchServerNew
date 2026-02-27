@@ -460,13 +460,24 @@ export const getTechnicianJobHistory = async (req, res) => {
       status: { $in: ["completed", "cancelled"] },
     })
       .populate("customerId", "fname lname mobileNumber email")
-      .populate("serviceId", "serviceName serviceType serviceCost")
+      .populate("serviceId", "serviceName serviceType serviceCost technicianAmount")
       .sort({ updatedAt: -1 });
+
+    // Remove baseAmount and add technicianAmount from service
+    const filteredJobs = jobs.map(job => {
+      const jobData = job.toObject ? job.toObject() : job;
+      const { baseAmount, ...jobWithoutBaseAmount } = jobData;
+      // Ensure technicianAmount is from service
+      return {
+        ...jobWithoutBaseAmount,
+        technicianAmount: jobData.serviceId?.technicianAmount || jobData.technicianAmount || 0,
+      };
+    });
 
     return res.status(200).json({
       success: true,
       message: "Job history fetched",
-      result: jobs,
+      result: filteredJobs,
     });
   } catch (err) {
     return res.status(500).json({
@@ -545,7 +556,7 @@ export const getTechnicianCurrentJobs = async (req, res) => {
       })
       .populate({
         path: "serviceId",
-        select: "serviceName serviceType",
+        select: "serviceName serviceType technicianAmount",
       })
       .sort({ createdAt: -1 });
 
@@ -617,19 +628,27 @@ export const getTechnicianCurrentJobs = async (req, res) => {
         address.latitude = jobObj.location.coordinates[1];
       }
 
-      return {
+      const responseData = {
         jobId: jobObj._id,
         status: jobObj.status,
         customer,
         technician,
         service,
         address,
-        baseAmount: jobObj.baseAmount,
         scheduledAt: jobObj.scheduledAt,
         createdAt: jobObj.createdAt,
         acceptedAt: jobObj.assignedAt,
         paymentStatus: jobObj.paymentStatus,
       };
+
+      // Only include baseAmount for Owner role
+      if (userRole !== "Technician") {
+        responseData.baseAmount = jobObj.baseAmount;
+      } else {
+        responseData.technicianAmount = jobObj.serviceId?.technicianAmount || jobObj.technicianAmount || 0;
+      }
+
+      return responseData;
     });
 
     return res.status(200).json({
@@ -752,10 +771,20 @@ export const updateBookingStatus = async (req, res) => {
       const busyStartTime = booking.assignedAt || booking.createdAt || null;
       await broadcastPendingJobsToTechnician(technicianProfileId, req.io, busyStartTime);
     }
+
+    // Re-fetch booking with service details to include technicianAmount
+    const updatedBooking = await ServiceBooking.findById(booking._id)
+      .populate("serviceId", "serviceName serviceType technicianAmount");
+
+    // Remove baseAmount and include technicianAmount from service
+    const bookingData = updatedBooking.toObject ? updatedBooking.toObject() : updatedBooking;
+    const { baseAmount, ...bookingWithoutBaseAmount } = bookingData;
+    bookingWithoutBaseAmount.technicianAmount = bookingData.serviceId?.technicianAmount || bookingData.technicianAmount || 0;
+
     return res.status(200).json({
       success: true,
       message: "Status updated",
-      result: booking,
+      result: bookingWithoutBaseAmount,
     });
   } catch (error) {
     console.error("updateBookingStatus:", error);
@@ -818,10 +847,19 @@ export const uploadWorkImages = async (req, res) => {
     booking.workImages = nextImages;
     await booking.save();
 
+    // Re-fetch booking with service details to include technicianAmount
+    const updatedBooking = await ServiceBooking.findById(booking._id)
+      .populate("serviceId", "serviceName serviceType technicianAmount");
+
+    // Remove baseAmount and include technicianAmount from service
+    const bookingData = updatedBooking.toObject ? updatedBooking.toObject() : updatedBooking;
+    const { baseAmount, ...bookingWithoutBaseAmount } = bookingData;
+    bookingWithoutBaseAmount.technicianAmount = bookingData.serviceId?.technicianAmount || bookingData.technicianAmount || 0;
+
     return res.status(200).json({
       success: true,
       message: "Work images uploaded successfully",
-      result: {},
+      result: bookingWithoutBaseAmount,
     });
   } catch (error) {
     return res.status(500).json({
