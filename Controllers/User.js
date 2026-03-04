@@ -1257,6 +1257,8 @@ export const completeProfile = async (req, res) => {
         updateData[field] = req.body[field];
       }
     });
+    // Mark profile as complete after filling required fields
+    updateData.profileComplete = true;
     const updated = await User.findByIdAndUpdate(
       userId,
       updateData,
@@ -1436,6 +1438,16 @@ export const updateMyProfile = async (req, res) => {
     Object.keys(req.body || {}).forEach((k) => {
       if (!forbidden.has(k) && allowedFields.includes(k)) updateData[k] = req.body[k];
     });
+
+    // Auto-calculate profileComplete: true if fname AND mobileNumber exist
+    const currentUser = await User.findById(userId).select("fname lname mobileNumber");
+    const finalFname = updateData.fname !== undefined ? updateData.fname : currentUser?.fname;
+    const finalMobileNumber = currentUser?.mobileNumber;
+
+    if (finalFname && finalMobileNumber) {
+      updateData.profileComplete = true;
+    }
+
     const updated = await User.findByIdAndUpdate(
       userId,
       updateData,
