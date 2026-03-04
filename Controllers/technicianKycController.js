@@ -346,6 +346,21 @@ export const getAllTechnicianKyc = async (req, res) => {
           }
           : null;
 
+        // ================= ENFORCE ONLINE PREREQUISITES INTEGRITY =================
+        if (technicianResult) {
+          const canBeOnline =
+            technicianResult.trainingCompleted === true &&
+            technicianResult.workStatus === "approved";
+
+          if (canBeOnline && k.verificationStatus !== "approved") {
+            technicianResult.availability = technicianResult.availability || {};
+            technicianResult.availability.isOnline = false;
+          } else if (!canBeOnline) {
+            technicianResult.availability = technicianResult.availability || {};
+            technicianResult.availability.isOnline = false;
+          }
+        }
+
         if (k.bankDetails) {
           delete k.bankDetails.accountNumberHash;
         }
@@ -421,6 +436,28 @@ export const getTechnicianKyc = async (req, res) => {
       })
       .lean();
 
+    // ================= ENFORCE ONLINE PREREQUISITES INTEGRITY =================
+    if (technician) {
+      const canBeOnline =
+        technician.trainingCompleted === true &&
+        technician.workStatus === "approved";
+
+      if (canBeOnline) {
+        // Also verify KYC is approved
+        if (kycDoc.verificationStatus !== "approved") {
+          technician.availability = technician.availability || {};
+          technician.availability.isOnline = false;
+          console.warn(
+            `⚠️ Enforced offline for technician ${technicianId}: KYC status is ${kycDoc.verificationStatus}`
+          );
+        }
+      } else {
+        // Force offline if any prerequisite not met
+        technician.availability = technician.availability || {};
+        technician.availability.isOnline = false;
+      }
+    }
+
     if (kycDoc.bankDetails) {
       delete kycDoc.bankDetails.accountNumberHash;
     }
@@ -487,6 +524,25 @@ export const getMyTechnicianKyc = async (req, res) => {
 
     const eligibility = await getTechnicianJobEligibility({ technicianProfileId });
     const kycObj = kyc.toObject();
+
+    // ================= ENFORCE ONLINE PREREQUISITES INTEGRITY =================
+    if (kycObj.technicianId) {
+      const tech = kycObj.technicianId;
+      const canBeOnline =
+        tech.trainingCompleted === true &&
+        tech.workStatus === "approved";
+
+      if (canBeOnline && kycObj.verificationStatus !== "approved") {
+        tech.availability = tech.availability || {};
+        tech.availability.isOnline = false;
+        console.warn(
+          `⚠️ Enforced offline for technician ${technicianProfileId}: KYC status is ${kycObj.verificationStatus}`
+        );
+      } else if (!canBeOnline) {
+        tech.availability = tech.availability || {};
+        tech.availability.isOnline = false;
+      }
+    }
 
     const workStatus = kycObj?.technicianId?.workStatus || null;
     const bankApproved = kycObj.bankVerificationStatus === "approved" || kycObj.bankVerified === true;
