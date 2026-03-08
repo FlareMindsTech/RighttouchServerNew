@@ -628,9 +628,9 @@ export const signupAndSendOtp = async (req, res) => {
         return fail(
           res,
           409,
-          "Mobile number already registered. Please login.",
+          `Mobile number already registered as a ${existingUser.role}. Please login with your ${existingUser.role} account.`,
           "MOBILE_ALREADY_EXISTS",
-          { identifier }
+          { identifier, existingRole: existingUser.role }
         );
       }
     }
@@ -1012,16 +1012,22 @@ export const login = async (req, res) => {
       return fail(res, 400, "Valid role required", "VALIDATION_ERROR");
     }
 
-    // Check if user exists with this role
-    // Need password selection ONLY if it's Owner
-    const query = User.findOne({ mobileNumber: finalIdentifier, role: normalizedRole });
-    if (normalizedRole === "Owner") {
-      query.select("+password");
-    }
-    const user = await query.exec();
+    // Check if user exists (ignoring role initially to give better error)
+    const user = await User.findOne({ mobileNumber: finalIdentifier }).select("+password role status");
 
     if (!user) {
       return fail(res, 404, "User not found. Please signup first.", "USER_NOT_FOUND");
+    }
+
+    // Role Mismatch Check
+    if (user.role !== normalizedRole) {
+      return fail(
+        res,
+        403,
+        `This account is registered as a ${user.role}. Please use the ${user.role} app to login.`,
+        "ROLE_MISMATCH",
+        { registeredRole: user.role, requestedRole: normalizedRole }
+      );
     }
 
     if (user.status === "Blocked") {
