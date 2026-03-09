@@ -40,7 +40,7 @@ export const broadcastPendingJobsToTechnician = async (technicianProfileId, io, 
       eligibleBookings = await ServiceBooking.find({
         serviceId: { $in: technicianServiceIds },
         technicianId: null,
-        status: "SEARCHING",
+        status: { $in: ["SEARCHING", "broadcasted"] },
         createdAt: { $gt: createdAfter },
       }).limit(20);
     } else {
@@ -62,7 +62,7 @@ export const broadcastPendingJobsToTechnician = async (technicianProfileId, io, 
       const bookingQuery = {
         serviceId: { $in: technicianServiceIds },
         technicianId: null,
-        status: "SEARCHING",
+        status: { $in: ["SEARCHING", "broadcasted"] },
         location: {
           $nearSphere: {
             $geometry: { type: "Point", coordinates: [lng, lat] },
