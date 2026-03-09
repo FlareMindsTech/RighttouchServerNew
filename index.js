@@ -65,13 +65,7 @@ const sanitizeStringPayload = (value) => {
   return value;
 };
 
-// Set static folder
-App.use(express.static("public"));
-
-// Global Middlewares
-App.use(cors());
-App.use(bodyParser.json());
-App.use(bodyParser.urlencoded({ extended: true }));
+// Global Middlewares (None - consolidated downstream)
 
 // 🔒 Security Hardening - Apply globally
 App.use(helmet()); // Set security HTTP headers (CSP, X-Frame-Options, etc.)
@@ -95,11 +89,7 @@ const limiter = rateLimit({
 });
 App.use("/api", limiter);
 
-// MongoDB Connection
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected successfully"))
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
+// MongoDB Connection (Moved downstream)
 
 // Socket.IO Setup with HTTP Server
 const httpServer = createServer(App);
@@ -177,7 +167,7 @@ io.on("connection", (socket) => {
 
 import { handleLocationUpdate } from "./Utils/technicianLocation.js";
 import { fetchTechnicianJobsInternal } from "./Utils/technicianJobFetch.js";
-import { initScheduledBookingCrons } from "./Utils/scheduledBookingCron.js";
+import { initBookingCrons } from "./Utils/bookingCron.js";
 
 // Middleware to attach io to all requests
 App.use((req, res, next) => {
@@ -185,8 +175,8 @@ App.use((req, res, next) => {
   next();
 });
 
-// ⏰ Initialize scheduled booking cron jobs (pass io for real-time socket events)
-initScheduledBookingCrons(io);
+// ⏰ Initialize new booking cron jobs (pass io for real-time socket events)
+initBookingCrons(io);
 
 // ✅ Single JSON parser with rawBody capture (needed for payment webhooks)
 App.use(
