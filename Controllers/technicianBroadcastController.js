@@ -164,7 +164,7 @@ export const respondToJob = async (req, res) => {
       { _id: id, status: { $in: ["SEARCHING", "requested", "broadcasted"] }, technicianId: null },
       {
         technicianId: technicianProfileId,
-        status: "ACCEPTED",
+        status: "accepted",
         assignedAt: new Date(),
         technicianSnapshot
       },
