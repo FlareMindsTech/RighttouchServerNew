@@ -174,7 +174,9 @@ export const createBooking = async (req, res) => {
     let autoCancelAt = null;
 
     if (bookingType === "scheduled" && finalScheduledAt) {
-      autoCancelAt = new Date(finalScheduledAt.getTime() - 12 * 60 * 60 * 1000);
+      const defaultCancel = new Date(finalScheduledAt.getTime() - 12 * 60 * 60 * 1000);
+      const minCancel = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      autoCancelAt = new Date(Math.max(defaultCancel.getTime(), minCancel.getTime()));
     } else {
       autoCancelAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours for instant
     }
@@ -343,7 +345,9 @@ export const storeBookingSchedule = async (req, res) => {
     const now = new Date();
     let autoCancelAt = null;
     if (bookingType === "scheduled" && finalScheduledAt) {
-      autoCancelAt = new Date(finalScheduledAt.getTime() - 12 * 60 * 60 * 1000);
+      const defaultCancel = new Date(finalScheduledAt.getTime() - 12 * 60 * 60 * 1000);
+      const minCancel = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      autoCancelAt = new Date(Math.max(defaultCancel.getTime(), minCancel.getTime()));
     } else {
       autoCancelAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
     }
@@ -919,6 +923,9 @@ export const updateBookingStatus = async (req, res) => {
     }
 
     booking.status = status;
+    if (status === "on_the_way") {
+      booking.autoCancelAt = null; // Disable auto-cancel once technician starts moving
+    }
     await booking.save();
     if (status === "completed") {
       // If payment is already verified, credit technician wallet (idempotent)
