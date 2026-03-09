@@ -27,11 +27,71 @@ const toFiniteNumber = (v) => {
 
 /* ================= TECHNICIAN ACTIVATION CHECK ================= */
 const checkTechnicianActivation = async (technicianProfileId) => {
-  // BYPASSED: All technicians are considered active for testing
-  return {
-    isActive: true,
-    message: "Technician account is active (bypass)",
-  };
+  try {
+    // ✅ Real verification gates (NO BYPASS)
+    const technician = await TechnicianProfile.findById(technicianProfileId).lean();
+    
+    if (!technician) {
+      return {
+        isActive: false,
+        message: "Technician profile not found",
+      };
+    }
+
+    // Gate 1: Profile must be complete
+    if (!technician.profileComplete) {
+      return {
+        isActive: false,
+        message: "Complete your profile first",
+      };
+    }
+
+    // Gate 2: Work status must be approved by owner
+    if (technician.workStatus !== "approved") {
+      return {
+        isActive: false,
+        message: `Account not approved. Status: ${technician.workStatus}`,
+      };
+    }
+
+    // Gate 3: KYC must be approved
+    const kyc = await TechnicianKyc.findOne({ technicianId: technicianProfileId })
+      .select("verificationStatus kycVerified bankVerified")
+      .lean();
+    if (!kyc || (kyc.verificationStatus !== "approved" && kyc.kycVerified !== true)) {
+      return {
+        isActive: false,
+        message: "KYC verification required",
+      };
+    }
+
+    // Gate 4: Bank account must be verified
+    if (!kyc.bankVerified) {
+      return {
+        isActive: false,
+        message: "Bank account not verified",
+      };
+    }
+
+    // Gate 5: Training must be completed
+    if (!technician.trainingCompleted) {
+      return {
+        isActive: false,
+        message: "Training completion required",
+      };
+    }
+
+    // ✅ All gates passed
+    return {
+      isActive: true,
+      message: "Technician account is active and verified",
+    };
+  } catch (error) {
+    return {
+      isActive: false,
+      message: `Activation check failed: ${error.message}`,
+    };
+  }
 };
 
 

@@ -29,7 +29,7 @@ export const fetchTechnicianJobsInternal = async (technicianProfileId) => {
 
     const bookings = await ServiceBooking.find({
         _id: { $in: bookingIds },
-        status: { $in: ["SEARCHING", "requested"] },
+        status: { $in: ["SEARCHING", "requested", "broadcasted"] },
         technicianId: null,
     })
         .populate([
