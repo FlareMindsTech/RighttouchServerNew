@@ -324,7 +324,7 @@ export const replaceServiceImages = async (req, res) => {
 
 export const getAllServices = async (req, res) => {
   try {
-    const { search, categoryId, page, limit } = req.query;
+    const { search, categoryId } = req.query;
 
     let query = { isActive: true };
 
@@ -348,31 +348,10 @@ export const getAllServices = async (req, res) => {
       ];
     }
 
-    let servicesQuery = Service.find(query)
+    const services = await Service.find(query)
       .populate("categoryId", "category categoryType description")
-      .sort({ createdAt: -1 });
-
-    let pagination = null;
-
-    // If pagination params exist → apply pagination
-    if (page && limit) {
-      const pageNum = Math.max(parseInt(page), 1);
-      const limitNum = Math.min(parseInt(limit), 100);
-      const skip = (pageNum - 1) * limitNum;
-
-      servicesQuery = servicesQuery.skip(skip).limit(limitNum);
-
-      const total = await Service.countDocuments(query);
-
-      pagination = {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(total / limitNum),
-      };
-    }
-
-    const services = await servicesQuery.lean();
+      .sort({ createdAt: -1 })
+      .lean();
 
     let filteredServices = services;
 
@@ -398,10 +377,7 @@ export const getAllServices = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Services fetched successfully",
-      result: {
-        services: filteredServices,
-        pagination,
-      },
+      result: filteredServices,
     });
 
   } catch (error) {

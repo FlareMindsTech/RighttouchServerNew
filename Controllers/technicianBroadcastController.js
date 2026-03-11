@@ -166,7 +166,7 @@ export const respondToJob = async (req, res) => {
         technicianId: technicianProfileId,
         status: "accepted",
         assignedAt: new Date(),
-        // autoCancelAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min window to click "On the Way"
+        autoCancelAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min window to click "On the Way"
         technicianSnapshot
       },
       { new: true, session }

@@ -71,7 +71,7 @@ export const broadcastPendingJobsToTechnician = async (technicianProfileId, io, 
       bookingQuery.createdAt = { $gt: createdAfter };
     }
 
-    let eligibleBookings = await ServiceBooking.find(bookingQuery).limit(20);
+    let eligibleBookings = await ServiceBooking.find(bookingQuery);
 
     if (eligibleBookings.length === 0) {
       return { success: true, count: 0, message: "No matching jobs nearby" };
