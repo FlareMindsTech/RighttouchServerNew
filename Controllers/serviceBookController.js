@@ -752,7 +752,7 @@ export const getTechnicianCurrentJobs = async (req, res) => {
 
     const jobs = await ServiceBooking.find({
       ...query,
-      status: { $in: ["ACCEPTED", "on_the_way", "reached", "in_progress"] },
+      status: { $in: ["accepted", "ACCEPTED", "on_the_way", "reached", "in_progress"] },
     })
       .populate({
         path: "customerId",
