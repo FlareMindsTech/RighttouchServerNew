@@ -603,7 +603,7 @@ export const signupAndSendOtp = async (req, res) => {
 
     // Prevent re-registering an existing mobile number (across any role)
     // Note: We still treat identifier as mobileNumber for database storage in User model
-    const existingUser = await User.findOne({ mobileNumber: identifier }).select("_id status");
+    const existingUser = await User.findOne({ mobileNumber: identifier }).select("_id status role");
 
     if (existingUser) {
       // 🧟 SELF-HEALING: If user is "Deleted" but still holds the number, free it up!
@@ -625,13 +625,12 @@ export const signupAndSendOtp = async (req, res) => {
         // Proceed with signup as if number was free
       } else {
         // Active user found
-        return fail(
-          res,
-          409,
-          `Mobile number already registered as a ${existingUser.role}. Please login with your ${existingUser.role} account.`,
-          "MOBILE_ALREADY_EXISTS",
-          { identifier, existingRole: existingUser.role }
-        );
+        const message =
+          existingUser.role === "Technician"
+            ? `Mobile number already registered as a Technician. Please login with your technician account.`
+            : `Mobile number already registered as a Customer. Please login with your Customer account.`;
+
+        return fail(res, 409, message, "MOBILE_ALREADY_EXISTS", { identifier, existingRole: existingUser.role });
       }
     }
 
