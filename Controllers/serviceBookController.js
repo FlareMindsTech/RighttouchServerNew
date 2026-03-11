@@ -30,7 +30,7 @@ const checkTechnicianActivation = async (technicianProfileId) => {
   try {
     // ✅ Real verification gates (NO BYPASS)
     const technician = await TechnicianProfile.findById(technicianProfileId).lean();
-    
+
     if (!technician) {
       return {
         isActive: false,
@@ -234,11 +234,9 @@ export const createBooking = async (req, res) => {
     let autoCancelAt = null;
 
     if (bookingType === "scheduled" && finalScheduledAt) {
-      const defaultCancel = new Date(finalScheduledAt.getTime() - 12 * 60 * 60 * 1000);
-      const minCancel = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      autoCancelAt = new Date(Math.max(defaultCancel.getTime(), minCancel.getTime()));
+      autoCancelAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours for scheduled
     } else {
-      autoCancelAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours for instant
+      autoCancelAt = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour for instant
     }
 
     const initialStatus = "pending";
@@ -405,11 +403,9 @@ export const storeBookingSchedule = async (req, res) => {
     const now = new Date();
     let autoCancelAt = null;
     if (bookingType === "scheduled" && finalScheduledAt) {
-      const defaultCancel = new Date(finalScheduledAt.getTime() - 12 * 60 * 60 * 1000);
-      const minCancel = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      autoCancelAt = new Date(Math.max(defaultCancel.getTime(), minCancel.getTime()));
+      autoCancelAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours for scheduled
     } else {
-      autoCancelAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      autoCancelAt = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour for instant
     }
     const initialStatus = "pending";
 
@@ -1378,4 +1374,48 @@ export const getCancellationReasons = async (req, res) => {
       technician: technicianReasons
     }
   });
+};
+
+/* =====================================================
+   DELETE ALL CUSTOMER BOOKINGS (CLEANUP)
+===================================================== */
+export const deleteAllCustomerBookings = async (req, res) => {
+  try {
+    if (req.user?.role !== "Customer") {
+      return res.status(403).json({ success: false, message: "Customer access only", result: {} });
+    }
+
+    const { userId } = req.user;
+
+    const session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      // 1. Delete all Service Bookings for this customer
+      const serviceBookings = await ServiceBooking.find({ customerId: userId }).select("_id").session(session);
+      const bookingIds = serviceBookings.map(b => b._id);
+
+      await ServiceBooking.deleteMany({ customerId: userId }).session(session);
+
+      // 2. Delete associated Job Broadcasts
+      await JobBroadcast.deleteMany({ bookingId: { $in: bookingIds } }).session(session);
+
+      // 3. Delete all Product Bookings for this customer
+      await ProductBooking.deleteMany({ customerId: userId }).session(session);
+    });
+    session.endSession();
+
+    console.log(`🗑️ Customer ${userId} wiped their entire booking history.`);
+
+    return res.status(200).json({
+      success: true,
+      message: "All service and product bookings deleted successfully",
+      result: {},
+    });
+  } catch (error) {
+    console.error("deleteAllCustomerBookings Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during cleanup",
+      result: { error: error.message },
+    });
+  }
 };
