@@ -87,6 +87,7 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
   message: "Too many requests from this IP",
+  validate: { trustProxy: false },
 });
 App.use("/api", limiter);
 
@@ -211,7 +212,7 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // Don't crash the process if req.ip is temporarily unavailable (e.g. aborted connections)
-  validate: { ip: false },
+  validate: { ip: false, trustProxy: false },
   keyGenerator: (req) => getClientIp(req),
   // Socket.IO uses its own transport endpoints; don't rate-limit those via Express
   skip: (req) => typeof req.path === "string" && req.path.startsWith("/socket.io"),
@@ -288,7 +289,7 @@ App.use((err, req, res, next) => {
   });
 });
 
-const port = process.env.PORT || 7372;
+const port = parseInt(process.env.PORT, 10) || 7372;
 httpServer.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
   console.log(`🔌 Socket.IO ready for real-time notifications`);
