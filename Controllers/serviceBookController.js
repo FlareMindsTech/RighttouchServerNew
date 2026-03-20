@@ -234,9 +234,11 @@ export const createBooking = async (req, res) => {
     let autoCancelAt = null;
 
     if (bookingType === "scheduled" && finalScheduledAt) {
-      autoCancelAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours for scheduled
+      // Scheduled: Expire 5 hours after creation
+      autoCancelAt = new Date(now.getTime() + 5 * 60 * 60 * 1000);
     } else {
-      autoCancelAt = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour for instant
+      // Instant: Expire 1 hour after creation
+      autoCancelAt = new Date(now.getTime() + 1 * 60 * 60 * 1000);
     }
 
     const initialStatus = "pending";
@@ -403,9 +405,11 @@ export const storeBookingSchedule = async (req, res) => {
     const now = new Date();
     let autoCancelAt = null;
     if (bookingType === "scheduled" && finalScheduledAt) {
-      autoCancelAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours for scheduled
+      // Scheduled: Expire 5 hours after creation
+      autoCancelAt = new Date(now.getTime() + 5 * 60 * 60 * 1000);
     } else {
-      autoCancelAt = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour for instant
+      // Instant: Expire 1 hour after creation
+      autoCancelAt = new Date(now.getTime() + 1 * 60 * 60 * 1000);
     }
     const initialStatus = "pending";
 
