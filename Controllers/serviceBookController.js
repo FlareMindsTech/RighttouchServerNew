@@ -165,6 +165,15 @@ export const createBooking = async (req, res) => {
     // ─── VALIDATE SCHEDULE WINDOW (TOMORROW/DAY AFTER ONLY) ──────────
     if (bookingType === "scheduled" && finalScheduledAt) {
       const now = new Date();
+      const minFuture = new Date(now.getTime() + 5 * 60 * 1000); // 5 mins grace
+
+      if (finalScheduledAt < minFuture) {
+        return res.status(400).json({
+          success: false,
+          message: "Selected time has passed. Please refresh the schedule and try again.",
+          result: {},
+        });
+      }
 
       const tomorrowStart = new Date(now);
       tomorrowStart.setDate(tomorrowStart.getDate() + 1);
@@ -177,7 +186,7 @@ export const createBooking = async (req, res) => {
       if (finalScheduledAt < tomorrowStart || finalScheduledAt > dayAfterEnd) {
         return res.status(400).json({
           success: false,
-          message: "Scheduled bookings are only allowed for Tomorrow or Day after Tomorrow",
+          message: "Scheduled bookings are only allowed for Tomorrow or Day after Tomorrow. Please refresh slots.",
           result: {
             tomorrow: tomorrowStart.toISOString().split("T")[0],
             dayAfter: dayAfterEnd.toISOString().split("T")[0]
@@ -349,6 +358,15 @@ export const storeBookingSchedule = async (req, res) => {
     // ─── VALIDATE SCHEDULE WINDOW (TOMORROW/DAY AFTER ONLY) ──────────
     if (bookingType === "scheduled" && finalScheduledAt) {
       const now = new Date();
+      const minFuture = new Date(now.getTime() + 5 * 60 * 1000); // 5 mins grace
+
+      if (finalScheduledAt < minFuture) {
+        return res.status(400).json({
+          success: false,
+          message: "Selected time has passed. Please refresh the schedule and try again.",
+          result: {},
+        });
+      }
 
       const tomorrowStart = new Date(now);
       tomorrowStart.setDate(tomorrowStart.getDate() + 1);
@@ -361,7 +379,7 @@ export const storeBookingSchedule = async (req, res) => {
       if (finalScheduledAt < tomorrowStart || finalScheduledAt > dayAfterEnd) {
         return res.status(400).json({
           success: false,
-          message: "Scheduled bookings are only allowed for Tomorrow or Day after Tomorrow",
+          message: "Scheduled bookings are only allowed for Tomorrow or Day after Tomorrow. Please refresh slots.",
           result: {
             tomorrow: tomorrowStart.toISOString().split("T")[0],
             dayAfter: dayAfterEnd.toISOString().split("T")[0]
@@ -1346,6 +1364,132 @@ export const getAdminJobHistory = async (req, res) => {
       message: error.message,
       result: { error: error.message },
     });
+  }
+};
+
+/* =====================================================
+   GET ALL BOOKINGS & CUSTOMERS (PUBLIC/MANAGEMENT)
+   Filters: status, customerMobile, technicianMobile
+===================================================== */
+export const getOwnerAllBookings = async (req, res) => {
+  try {
+    const { status, customerMobile, technicianMobile, limit = 50, skip = 0 } = req.query;
+
+    // 1. Build Query
+    let query = {};
+
+    // 🔗 Filter by Customer Mobile
+    const User = mongoose.model("User");
+    if (customerMobile) {
+      const customer = await User.findOne({ mobileNumber: customerMobile, role: "Customer" });
+      if (customer) {
+        query.customerId = customer._id;
+      } else {
+        // If mobile provided but not found, return empty (or continue with search that will yield empty)
+        query.customerId = new mongoose.Types.ObjectId(); // Non-existent ID
+      }
+    }
+
+    // 🔗 Filter by Technician Mobile
+    if (technicianMobile) {
+      const techUser = await User.findOne({ mobileNumber: technicianMobile, role: "Technician" });
+      if (techUser) {
+        const TechnicianProfile = mongoose.model("TechnicianProfile");
+        const profile = await TechnicianProfile.findOne({ userId: techUser._id });
+        if (profile) {
+          query.technicianId = profile._id;
+        } else {
+          query.technicianId = new mongoose.Types.ObjectId();
+        }
+      } else {
+        query.technicianId = new mongoose.Types.ObjectId();
+      }
+    }
+
+    // 📌 Filter by Status
+    if (status) {
+      if (status === "expired") {
+        const JobBroadcast = mongoose.model("JobBroadcast");
+        const expiredBroadcasts = await JobBroadcast.find({ status: "expired" }).select("bookingId");
+        const expiredBookingIds = expiredBroadcasts.map(b => b.bookingId);
+        query = {
+          ...query,
+          $or: [
+            { _id: { $in: expiredBookingIds } },
+            { status: "expired" }
+          ]
+        };
+      } else {
+        // Support any other status (accepted, completed, in_progress, etc.)
+        query.status = status;
+      }
+    }
+
+    const bookings = await ServiceBooking.find(query)
+      .populate("customerId", "fname lname mobileNumber email")
+      .populate("serviceId", "serviceName serviceType serviceCost")
+      .populate({
+        path: "technicianId",
+        select: "userId profileImage",
+        populate: {
+          path: "userId",
+          select: "mobileNumber fname lname"
+        }
+      })
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(skip));
+
+    // 2. Fetch All Customers as requested
+    const customers = await User.find({ role: "Customer" })
+      .select("fname lname mobileNumber email status profileComplete")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Bookings and Customers fetched successfully",
+      result: {
+        bookings,
+        customers,
+        totalBookings: bookings.length,
+        totalCustomers: customers.length
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* =====================================================
+   GET BOOKING BY ID (PUBLIC/MANAGEMENT)
+===================================================== */
+export const getOwnerBookingById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid booking ID" });
+    }
+
+    const booking = await ServiceBooking.findById(id)
+      .populate("customerId", "fname lname mobileNumber email")
+      .populate("serviceId", "serviceName serviceType description serviceCost technicianAmount")
+      .populate({
+        path: "technicianId",
+        populate: { path: "userId", select: "fname lname mobileNumber" }
+      })
+      .populate("addressId");
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Booking details fetched successfully",
+      result: booking,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
