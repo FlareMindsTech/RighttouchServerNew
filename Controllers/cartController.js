@@ -147,31 +147,46 @@ export const getMyCart = async (req, res) => {
         ensureCustomer(req);
         const customerId = req.user.userId;
 
-        const cartItems = await Cart.find({ customerId });
+        // 🚀 SCALABILITY: Lean query for performance
+        const cartItems = await Cart.find({ customerId }).lean();
+        if (!cartItems.length) {
+            return res.status(200).json({
+                success: true,
+                message: "Cart is empty",
+                result: [],
+            });
+        }
 
-        // Populate items based on type (uses populate; keeps response shape the same)
-        await Promise.all(
-            cartItems.map(async (cartItem) => {
-                const model = cartItem.itemType === "product" ? "Product" : "Service";
-                await cartItem.populate({ path: "itemId", model });
-            })
-        );
+        // 🚀 BULK POPULATION: Group by type to minimize DB hits (3 queries total)
+        const productIds = [];
+        const serviceIds = [];
+        cartItems.forEach(item => {
+            if (item.itemType === "product") productIds.push(item.itemId);
+            else if (item.itemType === "service") serviceIds.push(item.itemId);
+        });
 
-        const populatedItems = cartItems.map((cartItem) => {
-            const obj = cartItem.toObject();
-            const isPopulated = obj.itemId && typeof obj.itemId === "object" && obj.itemId._id;
+        const [products, services] = await Promise.all([
+            Product.find({ _id: { $in: productIds } }).lean(),
+            Service.find({ _id: { $in: serviceIds } }).lean()
+        ]);
 
+        const itemMap = {
+            product: Object.fromEntries(products.map(p => [p._id.toString(), p])),
+            service: Object.fromEntries(services.map(s => [s._id.toString(), s]))
+        };
+
+        const result = cartItems.map((cartItem) => {
+            const item = itemMap[cartItem.itemType][cartItem.itemId.toString()];
             return {
-                ...obj,
-                itemId: isPopulated ? obj.itemId._id : obj.itemId,
-                item: isPopulated ? obj.itemId : null,
+                ...cartItem,
+                item: item || null,
             };
         });
 
         res.status(200).json({
             success: true,
             message: "Cart fetched successfully",
-            result: populatedItems,
+            result: result,
         });
     } catch (error) {
         console.error("Get my cart error:", error);
@@ -190,66 +205,41 @@ export const updateCartItem = async (req, res) => {
         const { itemId, itemType, quantity } = req.body;
         const customerId = req.user.userId;
 
-        if (!itemId || !itemType || quantity == null) {
-            return res.status(400).json({
-                success: false,
-                message: "Item ID, item type, and quantity are required",
-                result: {},
-            });
-        }
-
-        if (!["product", "service"].includes(itemType)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid item type. Must be 'product' or 'service'",
-                result: {},
-            });
-        }
-
-        if (!Number.isInteger(quantity)) {
-            return res.status(400).json({
-                success: false,
-                message: "Quantity must be an integer",
-                result: {},
-            });
+        if (!itemId || !itemType || quantity === undefined) {
+            return res.status(400).json({ success: false, message: "Missing required fields" });
         }
 
         if (quantity <= 0) {
-            // If quantity is 0 or negative, remove the item
             await Cart.findOneAndDelete({ customerId, itemType, itemId });
-            return res.status(200).json({
-                success: true,
-                message: "Item removed from cart",
-                result: {},
-            });
+            return res.status(200).json({ success: true, message: "Item removed", result: { deleted: true, itemId } });
         }
 
+        // 🚀 ATOMIC & POPULATED: Return full details for instant UI update
         const cartItem = await Cart.findOneAndUpdate(
             { customerId, itemType, itemId },
             { quantity },
             { new: true, runValidators: true }
-        );
+        ).populate({
+            path: "itemId",
+            model: itemType === "product" ? "Product" : "Service"
+        }).lean();
 
         if (!cartItem) {
-            return res.status(404).json({
-                success: false,
-                message: "Cart item not found",
-                result: {},
-            });
+            return res.status(404).json({ success: false, message: "Cart item not found" });
         }
 
         res.status(200).json({
             success: true,
             message: "Cart item updated",
-            result: cartItem,
+            result: {
+                ...cartItem,
+                item: cartItem.itemId,
+                itemId: cartItem.itemId?._id || cartItem.itemId
+            },
         });
     } catch (error) {
         console.error("Update cart item error:", error);
-        res.status(error.statusCode || 500).json({
-            success: false,
-            message: "Failed to update cart item",
-            result: { reason: getErrorMessage(error) },
-        });
+        res.status(500).json({ success: false, message: "Update failed" });
     }
 };
 
@@ -338,32 +328,37 @@ export const updateCartById = async (req, res) => {
             });
         }
 
+        // 🚀 SCALABILITY: Populate and return lean object for speed
         const cartItem = await Cart.findOneAndUpdate(
             { _id: id, customerId },
             { quantity },
             { new: true, runValidators: true }
-        );
+        ).populate({
+            path: "itemId",
+            model: "will_be_resolved_by_refPath_if_configured_but_here_we_manual"
+        });
 
         if (!cartItem) {
-            return res.status(404).json({
-                success: false,
-                message: "Cart item not found",
-                result: {},
-            });
+            return res.status(404).json({ success: false, message: "Cart item not found" });
         }
 
+        // Manual populate if needed, but safer to use the type
+        const model = cartItem.itemType === "product" ? "Product" : "Service";
+        await cartItem.populate({ path: "itemId", model });
+
+        const obj = cartItem.toObject();
         res.status(200).json({
             success: true,
             message: "Cart item updated",
-            result: cartItem,
+            result: {
+                ...obj,
+                item: obj.itemId,
+                itemId: obj.itemId?._id || obj.itemId
+            },
         });
     } catch (error) {
         console.error("Update cart by id error:", error);
-        res.status(error.statusCode || 500).json({
-            success: false,
-            message: "Failed to update cart item",
-            result: { reason: getErrorMessage(error) },
-        });
+        res.status(500).json({ success: false, message: "Update failed" });
     }
 };
 
@@ -439,7 +434,10 @@ export const setCartItemSchedule = async (req, res) => {
             { customerId, itemType, itemId },
             updateData,
             { new: true, runValidators: true }
-        );
+        ).populate({
+            path: "itemId",
+            model: itemType === "product" ? "Product" : "Service"
+        }).lean();
 
         if (!cartItem) {
             return res.status(404).json({
@@ -451,16 +449,16 @@ export const setCartItemSchedule = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: "Schedule and fault problem updated for cart item",
-            result: cartItem,
+            message: "Schedule updated",
+            result: {
+                ...cartItem,
+                item: cartItem.itemId,
+                itemId: cartItem.itemId?._id || cartItem.itemId
+            },
         });
     } catch (error) {
         console.error("Set cart item schedule error:", error);
-        res.status(error.statusCode || 500).json({
-            success: false,
-            message: "Failed to update schedule",
-            result: { reason: getErrorMessage(error) },
-        });
+        res.status(500).json({ success: false, message: "Scheduling failed" });
     }
 };
 
