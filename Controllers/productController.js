@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Product from "../Schemas/Product.js";
 import Category from "../Schemas/Category.js";
+import { uploadToGCS } from "../Utils/cloudinaryUpload.js";
 
 const ALLOWED_PRICING_MODELS = ["fixed", "starting_from", "after_inspection"];
 
@@ -206,7 +207,16 @@ export const uploadProductImages = async (req, res) => {
       });
     }
 
-    const imageUrls = req.files.map(file => file.path);
+    const imageUrls = [];
+
+for (const file of req.files) {
+  const imageUrl = await uploadToGCS(
+    file,
+    "products-images"
+  );
+
+  imageUrls.push(imageUrl);
+}
     product.productImages.push(...imageUrls);
     await product.save();
 
@@ -325,7 +335,16 @@ export const replaceProductImages = async (req, res) => {
       });
     }
 
-    const imageUrls = req.files.map(file => file.path);
+    const imageUrls = [];
+
+for (const file of req.files) {
+  const imageUrl = await uploadToGCS(
+    file,
+    "products-images"
+  );
+
+  imageUrls.push(imageUrl);
+}
     product.productImages = imageUrls;
     await product.save();
 
@@ -560,7 +579,18 @@ export const updateProduct = async (req, res) => {
 
     let productImages = product.productImages;
     if (req.files && req.files.length > 0) {
-      productImages = req.files.map(file => file.path);
+      const imageUrls = [];
+
+for (const file of req.files) {
+  const imageUrl = await uploadToGCS(
+    file,
+    "products"
+  );
+
+  imageUrls.push(imageUrl);
+}
+
+productImages = imageUrls;
     }
     updateData.productImages = productImages;
 

@@ -273,17 +273,17 @@ App.use((req, res, next) => {
         success: false,
         message: "Request timeout",
         result: "Request took too long to process",
-      });
+      }); 
     }
   });
-  next();
+  next(); 
 });
 
 mongoose.set("strictQuery", false);
 
 mongoose
   .connect(process.env.MONGO_URI, {
-    serverSelectionTimeoutMS: 10000, // 10 seconds
+       serverSelectionTimeoutMS: 10000, // 10 seconds
     socketTimeoutMS: 45000, // 45 seconds
   })
   .then(() => console.log("Connected to MongoDB Atlas..."))
