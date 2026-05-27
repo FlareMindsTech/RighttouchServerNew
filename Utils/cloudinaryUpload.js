@@ -9,11 +9,14 @@ dotenv.config();
    GOOGLE CLOUD STORAGE CONFIG
 ====================================================== */
 
+// const storage = new Storage({
+//   projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+//   keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
+// });
 const storage = new Storage({
+  credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
   projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-  keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
 });
-
 const bucket = storage.bucket(
   process.env.GOOGLE_CLOUD_BUCKET_NAME
 );
