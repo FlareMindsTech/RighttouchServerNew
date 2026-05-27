@@ -342,8 +342,9 @@ App.use((err, req, res, next) => {
   });
 });
 
-const port = parseInt(process.env.PORT, 10) || 7372;
-httpServer.listen(port, () => {
+const port = parseInt(process.env.PORT, 10) || 8080;
+
+httpServer.listen(port, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${port}`);
   console.log(`🔌 Socket.IO ready for real-time notifications`);
 });
